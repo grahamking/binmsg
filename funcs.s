@@ -205,6 +205,32 @@ _err_numeric:
 	jmp exit
 
 ;;
+;; isatty
+;; IN  rdi: fd to test
+;; OUT rax: negative if fd is _not_ a terminal
+;;     caller should `test rax, rax` and `js _not_terminal`
+;;
+global isatty
+isatty:
+	push rdx
+	push rsi
+
+	; we don't use what goes in here, but we need space
+	sub rsp, SIZEOF_TERMIOS
+
+	mov rax, SYS_IOCTL
+		; rdi already has fd
+	mov rsi, TCGETS
+	mov rdx, rsp
+	safe_syscall
+
+	add rsp, SIZEOF_TERMIOS
+
+	pop rsi
+	pop rdx
+	ret
+
+;;
 ;; exit
 ;; never returns
 ;;

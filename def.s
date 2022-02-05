@@ -14,7 +14,7 @@
 section .data
 
 	MAX_FNAME_LEN: equ 100
-	USAGE: db `Usage: echo data | xwrite filename\n\0`
+	USAGE: db `Usage: \n\tWrite: echo -n data | xwrite -w filename\n\tRead: xwrite -r filename [> out]\n\0`
 
 ; fd's
 	STDIN: equ 0
@@ -22,11 +22,21 @@ section .data
 	STDERR: equ 2
 
 ; syscalls
-	SYS_WRITE: equ	1
-	SYS_OPEN: equ	2
-	SYS_FSTAT: equ	5
-	SYS_MMAP: equ	9
-	SYS_EXIT: equ	60
+	SYS_READ: equ 0
+	SYS_WRITE: equ 1
+	SYS_OPEN: equ 2
+	SYS_CLOSE: equ 3
+	SYS_FSTAT: equ 5
+	SYS_MMAP: equ 9
+	SYS_MUNMAP: equ 11
+	SYS_IOCTL: equ 16
+	SYS_MSYNC: equ 26
+	SYS_EXIT: equ 60
+
+	MAP_SHARED: equ 1
+	TCGETS: equ 0x00005401
+	SIZEOF_TERMIOS: equ 60  ; From: 'struct termios x; print sizeof(x)'
+	MS_SYNC: equ 4			; msync synchronous because we exit soon after
 
 ; err codes
 	ERR0: db "NOPE",10,0
