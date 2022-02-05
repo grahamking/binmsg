@@ -30,15 +30,15 @@ section .data
 
 ; err codes
 	ERR0: db "NOPE",10,0
-	ERR1: db "EPERM",10,0
-	ERR2: db "ENOENT",10,0
-	ERR3: db "ESRCH",10,0
-	ERR4: db "EINTR: Interrupted system call",10,0
-	ERR5: db "EIO: I/O error ",10,0
-	ERR6: db "ENXIO	 No such device or address",10,0
-	ERR7: db "E2BIG	 Argument list too long",10,0
+	ERR1: db "EPERM Operation not permitted",10,0
+	ERR2: db "ENOENT No such file or directory",10,0
+	ERR3: db "ESRCH No such process",10,0
+	ERR4: db "EINTR Interrupted system call",10,0
+	ERR5: db "EIO I/O error ",10,0
+	ERR6: db "ENXIO No such device or address",10,0
+	ERR7: db "E2BIG Argument list too long",10,0
 	ERR8: db "ENOEXEC Exec format error",10,0
-	ERR9: db "EBADF	 Bad file number ",10,0
+	ERR9: db "EBADF Bad file number ",10,0
 	ERR10: db "ECHILD No child processes",10,0
 	ERR11: db "EAGAIN Try again",10,0
 	ERR12: db "ENOMEM Out of memory",10,0
@@ -65,4 +65,4 @@ section .data
 	ERR33: db "EDOM	 Math argument out of domain of func",10,0
 	ERR34: db "ERANGE Math result not representable",10,0
 	ERRS: dq ERR0, ERR1, ERR2, ERR3, ERR4, ERR5, ERR6, ERR7, ERR8, ERR9, ERR10, ERR11, ERR12, ERR13, ERR14, ERR15, ERR16, ERR17, ERR18, ERR18, ERR20, ERR21, ERR22, ERR23, ERR24, ERR25, ERR26, ERR27, ERR28, ERR29, ERR30, ERR31, ERR32, ERR33, ERR34
-
+	ERRS_BYTE_LEN: equ $-ERRS  ; will need to divide by 8 to get num items

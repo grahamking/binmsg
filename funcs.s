@@ -172,9 +172,35 @@ err:
 	mov rdi, rsi
 	call print_err
 
-	lea r14, QWORD [ERRS]
-	mov rdi, QWORD [r14+rax*8]
+	mov rcx, ERRS_BYTE_LEN
+	shr rcx, 3 ; divide by 8
+	cmp rax, rcx
+	jge _err_numeric
+
+	mov rdi, QWORD [ERRS+rax*8]
 	call print_err
+	jmp exit
+
+_err_numeric:
+	; err code (rax) isn't in our table, print the code itself
+
+	; convert code to string
+	mov rdi, rax
+	sub rsp, 8
+	mov rsi, rsp
+	call itoa
+
+	; print code
+	mov rdi, rsi
+	call print_err
+	add rsp, 8
+
+	; print carriage return
+	push 0   ; these two pushes make null-terminated string "\n" on stack
+	push 10
+	mov rdi, rsp
+	call print_err
+	add rsp, 2
 
 	jmp exit
 
