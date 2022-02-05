@@ -2,8 +2,7 @@
 ;; functions
 ;;
 
-section .data
-	%include "def.s"
+%include "def.s"
 
 section .text
 
@@ -84,7 +83,7 @@ fprint:
 	; swap rdi/rsi from earlier push
 	pop rdi  ; file descriptor now in rdi
 	pop rsi  ; rsi now points at str addr
-	syscall
+	safe_syscall
 
 	pop rdx
 	pop rax
@@ -187,4 +186,4 @@ global exit
 exit:
 	mov rdi, 0  ; return code 0
 	mov rax, SYS_EXIT
-	syscall
+	safe_syscall

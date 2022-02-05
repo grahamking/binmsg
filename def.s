@@ -1,7 +1,17 @@
 ;;
 ;; static definitions
-;; %include in .data section
 ;;
+
+; syscall overwrites rcx and r11, and I'm not going to remember every time
+%macro safe_syscall 0
+	push rcx
+	push r11
+	syscall
+	pop r11
+	pop rcx
+%endmacro
+
+section .data
 
 	MAX_FNAME_LEN: equ 100
 	USAGE: db `Usage: echo data | xwrite filename\n\0`
@@ -35,25 +45,24 @@
 	ERR13: db "EACCES Permission denied",10,0
 	ERR14: db "EFAULT Bad address",10,0
 	ERR15: db "ENOTBLK Block device required",10,0
-
-;ERR4: db "EBUSY Device or resource busy */
-;ERR4: db "EEXIST File exists */
-;ERR4: db "EXDEV Cross-device link */
-;ERR4: db "ENODEV No such device */
-;ERR4: db "ENOTDIR Not a directory */
-;ERR4: db "EISDIR Is a directory */
-;ERR4: db "EINVAL Invalid argument */
-;ERR4: db "ENFILE File table overflow */
-;ERR4: db "EMFILE Too many open files */
-;ERR4: db "ENOTTY Not a typewriter */
-;ERR4: db "ETXTBSY Text file busy */
-;ERR4: db "EFBIG File too large */
-;ERR4: db "ENOSPC No space left on device */
-;ERR4: db "ESPIPE Illegal seek */
-;ERR4: db "EROFS Read-only file system */
-;ERR4: db "EMLINK Too many links */
-;ERR4: db "EPIPE Broken pipe */
-;ERR4: db "EDOM	 Math argument out of domain of func */
-;ERR4: db "ERANGE Math result not representable */
-	ERRS: dq ERR0, ERR1, ERR2, ERR3, ERR4, ERR5, ERR6, ERR7, ERR8, ERR9, ERR10, ERR11, ERR12, ERR13, ERR14
+	ERR16: db "EBUSY Device or resource busy",10,0
+	ERR17: db "EEXIST File exists",10,0
+	ERR18: db "EXDEV Cross-device link",10,0
+	ERR19: db "ENODEV No such device",10,0
+	ERR20: db "ENOTDIR Not a directory",10,0
+	ERR21: db "EISDIR Is a directory",10,0
+	ERR22: db "EINVAL Invalid argument",10,0
+	ERR23: db "ENFILE File table overflow",10,0
+	ERR24: db "EMFILE Too many open files",10,0
+	ERR25: db "ENOTTY Not a typewriter",10,0
+	ERR26: db "ETXTBSY Text file busy",10,0
+	ERR27: db "EFBIG File too large",10,0
+	ERR28: db "ENOSPC No space left on device",10,0
+	ERR29: db "ESPIPE Illegal seek",10,0
+	ERR30: db "EROFS Read-only file system",10,0
+	ERR31: db "EMLINK Too many links",10,0
+	ERR32: db "EPIPE Broken pipe",10,0
+	ERR33: db "EDOM	 Math argument out of domain of func",10,0
+	ERR34: db "ERANGE Math result not representable",10,0
+	ERRS: dq ERR0, ERR1, ERR2, ERR3, ERR4, ERR5, ERR6, ERR7, ERR8, ERR9, ERR10, ERR11, ERR12, ERR13, ERR14, ERR15, ERR16, ERR17, ERR18, ERR18, ERR20, ERR21, ERR22, ERR23, ERR24, ERR25, ERR26, ERR27, ERR28, ERR29, ERR30, ERR31, ERR32, ERR33, ERR34
 
