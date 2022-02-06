@@ -13,6 +13,7 @@
 
 section .data
 
+	MAX_STORE: equ 4096    ; it's very unlikely for a binary to have a full empty page
 	MAX_FNAME_LEN: equ 100
 	USAGE: db `Usage: \n\tWrite: echo -n data | xwrite -w filename\n\tRead: xwrite -r filename [> out]\n\0`
 

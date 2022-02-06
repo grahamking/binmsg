@@ -15,11 +15,8 @@
 ;; param1: err message
 %macro err_check 1
 	cmp rax, 0
-	jge %%ok
-	mov rdi, rax
-	mov rsi, %1
-	jmp err ; jmp not call because it doesn't return
-	%%ok:
+	mov rdi, %1 ; should be a conditional move, but no immediate for that
+	jl err
 %endmacro
 
 ;; end macros
@@ -82,8 +79,8 @@ _start:
 
 	; number of cmd line arguments is at rsp
 	; we want exactly 2, program name, and a filename
-	mov rax, [rsp]
-	cmp rax, 2
+	mov al, BYTE [rsp]   ; don't need to clear al, registers start at 0
+	cmp al, 2
 	jne print_usage
 
 	; strlen of filename
@@ -92,8 +89,8 @@ _start:
 
 	; open the file, we need fd for mmap
 				; filename still in rdi
-	mov rsi, 2	; flags: O_RDWR
-	mov rax, SYS_OPEN
+	mov esi, 2	; flags: O_RDWR
+	mov eax, SYS_OPEN
 	safe_syscall
 	err_check EM_OPEN
 
@@ -103,8 +100,8 @@ _start:
 	sub rsp, 144 ; struct stat in stat/stat.h
 
 	; fstat file to get size
-	mov rax, SYS_FSTAT
-	mov rdi, [fd_ptr]
+	mov eax, SYS_FSTAT
+	mov edi, [fd_ptr]
 	mov rsi, rsp	; &stat
 	safe_syscall
 	err_check EM_FSTAT
@@ -114,10 +111,10 @@ _start:
 	mov [file_size_ptr], rax;
 
 	; mmap it
-	mov rax, SYS_MMAP
-	mov rdi, 0 ; let kernel choose starting address
-	mov rsi, [file_size_ptr] ; size
-	mov rdx, 3 ; prot: PROT_READ|PROT_WRITE which are 1 and 2
+	mov eax, SYS_MMAP
+	mov edi, 0 ; let kernel choose starting address
+	mov esi, [file_size_ptr] ; size
+	mov edx, 3 ; prot: PROT_READ|PROT_WRITE which are 1 and 2
 	mov r10, MAP_SHARED; flags
 	mov r8, [fd_ptr]
 	mov r9, 0; offset in the file to start mapping
@@ -127,12 +124,7 @@ _start:
 
 	; check it's an ELF file
 	cmp [rax], DWORD ELF_HEADER
-	je _elf_ok
-	; invalid elf header, use our macro by faking rax err code
-	mov rax, -1
-	err_check EM_ELF
-
-_elf_ok:
+	jne _elf_err
 
 	; ELF format is 64 bytes of header + variable program headers,
 	; then the .text section (the program opcodes).
@@ -143,11 +135,11 @@ _elf_ok:
 	mov r12, [mmap_ptr_ptr]		; Get mmap address
 
 	; program headers
-	xor rax, rax
+	xor eax, eax
 	mov ax, WORD [r12+54]		; size of a program header
-	xor rcx, rcx
+	xor ecx, ecx
 	mov cx, WORD [r12+56]		; number of program headers
-	mul rcx
+	mul ecx
 	add rax, QWORD [r12+32]		; offset of start of program headers
 
 	mov [write_offset_ptr], rax
@@ -156,15 +148,15 @@ _elf_ok:
 	mov [space_addr_ptr], rax
 
 	; count contiguous 0's (available space)
-	xor rcx, rcx
-_next_null_byte:
-	cmp [rax], BYTE 0
-	jne _end_of_empty
-	inc rcx
-	inc rax
-	jmp _next_null_byte
+	mov rdi, rax		; compare this string
+	mov eax, 0			;  with 0 (null byte)
+	mov ecx, MAX_STORE  ; don't go beyond this many bytes
+	repe scasb			; repeat moving rdi forward until it doesn't match al
 
-_end_of_empty:
+	; space is current rdi pos minus start pos
+	mov rcx, rdi
+	sub rcx, [space_addr_ptr]
+	dec ecx  ; rep leaves rdi on first non-null byte, which we don't count
 	mov [num_space_ptr], rcx
 
 	; tell user how much space there is
@@ -175,7 +167,7 @@ _end_of_empty:
 
 	; convert number to string and print it
 	sub rsp, 8	; we don't expect more than 7 digits (+ null byte) of empty space
-	mov rdi, rcx
+	mov rdi, rcx ; rcx still holds [num_space_ptr], so a load
 	mov rsi, rsp
 	call itoa
 
@@ -187,35 +179,32 @@ _end_of_empty:
 	call print
 
 	; is there any space?
-	mov rax, [num_space_ptr]
-	cmp rax, 0
+	mov eax, DWORD [num_space_ptr]
+	cmp al, 0
 	je _cleanup
 
 	; is there input on STDIN?
-	mov rdi, STDIN
+	mov edi, STDIN
 	call isatty
 	test rax, rax
-	js _we_have_input
-	jmp exit  ; if STDIN is a terminal we're done
-
-_we_have_input:
+	jns exit ; if STDIN is a terminal we're done
 
 	; read up to [num_space_ptr] bytes from stdin straight into output
-	mov rax, SYS_READ
-	mov rdi, STDIN
+	mov eax, SYS_READ
+	mov edi, STDIN
 	mov rsi, [space_addr_ptr]		; read straight into the file
-	mov rdx, [num_space_ptr]		; how many bytes to read
+	mov edx, [num_space_ptr]		; how many bytes to read
 	safe_syscall
 	err_check EM_READ_STDIN
 	mov [num_wrote_ptr], rax ; rax tells us how many bytes actually written
 
 	; sync the mmap back to disk
 	mov rcx, [write_offset_ptr]
-	add rcx, [num_wrote_ptr]
-	mov rax, SYS_MSYNC
+	add ecx, [num_wrote_ptr]
+	mov eax, SYS_MSYNC
 	mov rdi, [mmap_ptr_ptr] ; mem to write must be aligned, so use start
 	mov rsi, rcx			; how many bytes to write back
-	mov rdx, MS_SYNC
+	mov edx, MS_SYNC
 	safe_syscall
 	err_check EM_MSYNC
 
@@ -226,7 +215,7 @@ _we_have_input:
 
 	; convert byte count, print it
 	sub rsp, 8     ; should be plenty of space for string
-	mov rdi, [num_wrote_ptr]   ; num bytes written, saved earlier from rax
+	mov edi, [num_wrote_ptr]   ; num bytes written, saved earlier from rax
 	mov rsi, rsp   ; buffer
 	call itoa
 	mov rdi, rsi   ; the buffer we just filled with itoa(num bytes written)
@@ -260,16 +249,24 @@ _we_have_input:
 _cleanup:
 
 	; munmap. we probably don't need this
-	mov rax, SYS_MUNMAP
+	mov eax, SYS_MUNMAP
 	mov rdi, [mmap_ptr_ptr]
-	mov rsi, [file_size_ptr]
-	safe_syscall
+	mov esi, [file_size_ptr]
+	syscall  ; not safe_syscall, no need so late in the program
 	err_check EM_MUNMAP
 
 	; close the file. also probably not necessary
-	mov rax, SYS_CLOSE
-	mov rdi, [fd_ptr]
-	safe_syscall
+	mov eax, SYS_CLOSE
+	mov edi, [fd_ptr]
+	syscall  ; not safe_syscall, no need so late in the program
 	err_check EM_CLOSE
 
 	jmp exit
+
+;
+; misc jumps
+;
+_elf_err:
+	; invalid elf header, use our macro by faking rax err code
+	mov rax, -1
+	err_check EM_ELF
