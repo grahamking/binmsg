@@ -144,7 +144,7 @@ _start:
 
 	mov [write_offset_ptr], rax
 
-	add rax, r12	; rax now has address of start of program headers
+	add rax, r12	; rax now has address of end of program headers, start of spare space
 	mov [space_addr_ptr], rax
 
 	; count contiguous 0's (available space)
@@ -167,11 +167,11 @@ _start:
 
 	; convert number to string and print it
 	sub rsp, 8	; we don't expect more than 7 digits (+ null byte) of empty space
-	mov rdi, rcx ; rcx still holds [num_space_ptr], so a load
+	mov rdi, rcx ; rcx still holds [num_space_ptr]
 	mov rsi, rsp
 	call itoa
 
-	mov rdi, rsp
+	mov rdi, rsi
 	call print
 	add rsp, 8
 

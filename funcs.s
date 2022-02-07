@@ -117,6 +117,9 @@ itoa:
 	push rbx
 	push rcx
 	push rdx
+	push rsi
+	push rdi
+	push r14
 
 	mov ecx, 0
 	mov rax, rdi  ; rax is numerator
@@ -127,23 +130,28 @@ _itoa_next_digit:
 	xor edx, edx  ; rdx to 0, it is going to get remainder
 	div rbx
 	add edx, 0x30	; convert to ASCII
-	push rdx		; digits are in reverse order. stacks are good for that.
+	dec rsp
+	mov [rsp], BYTE dl	; digits are in reverse order. stacks are good for that.
+	                    ; this must be dl, a byte, so that 'movsb' can move bytes later
+					    ; and later when we 'add rsp, r14' that's a number of bytes
 	inc cl
-	cmp al, 0		; do we have more digits?
+	cmp al, 0		    ; do we have more digits?
 	jg _itoa_next_digit
+	mov r14, rcx    ; save number of converted digits
 
-	; now pop them off the stack into memory, they will be in correct order
-	xor ebx, ebx
-_itoa_next_format:
-	pop rax
-	mov [rsi+rbx], BYTE al
-	inc bx
-	loop _itoa_next_format
-
-	; null byte to terminate string
-	mov [rsi+rbx], BYTE 0
+	; now copy them from stack into memory, they will be in correct order
+	cld					; clear direction flag, so we walk up
+	mov rdi, rsi		; rsi had desination address
+	mov rsi, rsp		; source is stack
+						; rcx already has string length
+	rep movsb			; repeat rcx times: copy rsi++ to rdi++
+	mov [rdi], BYTE 0	; null byte to terminate string
+	add rsp, r14		; clear stack
 
 	; epilogue
+	pop r14
+	pop rdi
+	pop rsi
 	pop rdx
 	pop rcx
 	pop rbx
