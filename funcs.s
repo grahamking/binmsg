@@ -7,6 +7,163 @@
 section .text
 
 ;;
+;; write_msg: Read from stdin, write into the file
+;; rdi: address of space to write to [space_addr_ptr]
+;; rsi: max length of data to write [num_space_ptr]
+;; rdx: mmap address, we need this to msync
+;; rcx: offset of space to write to [space_offset_ptr]
+;;
+global write_msg
+write_msg:
+	push rax
+
+	mov r11, rcx ; [space_offset_ptr]
+	mov r12, rdi ; [space_addr_ptr]
+	mov r13, rsi ; [num_space_ptr]
+	mov r14, rdx ; [mmap_ptr_ptr]
+
+	; read up to [num_space_ptr] bytes from stdin straight into output
+	mov eax, SYS_READ
+	mov edi, STDIN
+	mov rsi, r12		; read straight into the file
+	mov rdx, r13		; how many bytes to read
+	safe_syscall
+	err_check EM_READ_STDIN
+	; rax now holds how many bytes actually written
+	mov r15, rax
+
+	; sync the mmap back to disk
+	mov rcx, r11
+	add ecx, eax  ; bytes written
+	mov eax, SYS_MSYNC
+	mov rdi, r14			; mem to write must be aligned, so use start
+	mov rsi, rcx			; how many bytes to write back
+	mov edx, MS_SYNC
+	safe_syscall
+	err_check EM_MSYNC
+
+	; tell user what we did
+
+	mov rdi, WROTE
+	call print
+
+	; convert byte count, print it
+	sub rsp, 8     ; should be plenty of space for string
+	mov rdi, r15   ; num bytes written, saved earlier from rax
+	mov rsi, rsp   ; buffer
+	call itoa
+	mov rdi, rsi   ; the buffer we just filled with itoa(num bytes written)
+	call print
+	add rsp, 8
+
+	; TODO this ain't write can't do this kind of thing to the stack
+	;  move static strings to .data section
+
+	; print comma and space
+	push 0   ; null byte
+	push ' ' ; space (32)
+	push ',' ; comma (44)
+	mov rdi, rsp
+	call print
+	add rsp, 3
+
+	; convert offset count, print it
+	sub rsp, 8
+	mov rdi, r11
+	mov rsi, rsp
+	call itoa
+	mov rdi, rsi
+	call print
+	add rsp, 8
+
+	; print carriage return
+	push QWORD 0x000a ; null-terminated string "\n" on stack. push is always 8 bytes
+	mov rdi, rsp
+	call print
+	add rsp, 8
+
+	pop rax
+	ret
+
+;;
+;; read_msg: Read from the file, write to stdout
+;; rdi: Message start address
+;; rsi: Message length in bytes
+;;
+global read_msg
+read_msg:
+	push rax
+	push rcx
+	push r12
+
+	mov r12, rsi ; save message length
+
+	; is there a message? we decide this based on first byte, must not be null
+	mov al, BYTE [rdi]
+	cmp al, 0
+	jne _read_msg_proceed
+
+	; if there's no msg display space and exit
+	; this is probably more common than display msg, so make it the predicated not-jump
+	mov rdi, r12
+	call show_space
+	jmp _read_msg_epilogue
+
+_read_msg_proceed:
+	; yes there's a message, copy it from mmap into stack
+	mov ecx, esi   ; message length param
+	sub rsp, rcx
+	mov rsi, rdi   ; message address param
+	mov rdi, rsp
+	rep movsb
+
+	; write it to stdout
+	mov eax, SYS_WRITE
+	mov edi, STDOUT
+	mov rsi, rsp
+	mov rdx, r12
+	safe_syscall
+
+	add rsp, r12
+
+_read_msg_epilogue:
+	pop r12
+	pop rcx
+	pop rax
+
+	ret
+
+;;
+;; show_space: Print how much space is available in this file
+;; rdi: how much space is available, as a number
+;;
+global show_space
+show_space:
+	push rsi
+	push rdi
+
+	; print message
+	mov rdi, SPACE_START
+	call print
+
+	; convert number to string and print it
+	pop rdi  ; param we were given space as number
+	sub rsp, 8	; we don't expect more than 7 digits (+ null byte) of empty space
+	;mov rdi, [num_space_ptr]
+	mov rsi, rsp
+	call itoa
+
+	mov rdi, rsi
+	call print
+	add rsp, 8
+
+	mov rdi, SPACE_END
+	call print
+
+	pop rsi
+	ret
+
+;;
 ;; print usage and exit
 ;;
 global print_usage
@@ -135,7 +292,7 @@ _itoa_next_digit:
 	                    ; this must be dl, a byte, so that 'movsb' can move bytes later
 					    ; and later when we 'add rsp, r14' that's a number of bytes
 	inc cl
-	cmp al, 0		    ; do we have more digits?
+	cmp eax, 0		    ; do we have more digits?
 	jg _itoa_next_digit
 	mov r14, rcx    ; save number of converted digits
 

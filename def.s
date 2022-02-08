@@ -1,8 +1,18 @@
 ;;
-;; static definitions
+;; shared and static definitions
 ;;
 
-; syscall overwrites rcx and r11, and I'm not going to remember every time
+;; macros
+
+;; handle error and exit
+;; param1: err message
+%macro err_check 1
+	cmp rax, 0
+	mov rdi, %1 ; should be a conditional move, but no immediate for that
+	jl err
+%endmacro
+
+;; syscall overwrites rcx and r11, and I'm not going to remember every time
 %macro safe_syscall 0
 	push rcx
 	push r11
@@ -11,11 +21,34 @@
 	pop rcx
 %endmacro
 
+;; end macros
+
 section .data
 
-	MAX_STORE: equ 4096    ; it's very unlikely for a binary to have a full empty page
+	ELF_HEADER: equ 0x464c457f  ; ELF magic header
+	ELF_EXEC: equ 2				; ELF e_type of ET_EXEC
+	PH_LOAD: equ 1				; program header type LOAD
 	MAX_FNAME_LEN: equ 100
-	USAGE: db `Usage: \n\tWrite: echo -n data | xwrite -w filename\n\tRead: xwrite -r filename [> out]\n\0`
+	USAGE: db `Usage: \n\tWrite: echo -n data | xwrite filename\n\tRead: xwrite filename [> out]\n\0`
+
+; messages
+
+	SPACE_START: db "Available space: ",0
+	SPACE_END: db " bytes",10,0
+	WROTE: db "Wrote bytes at offset: ",0
+
+; error messages
+
+	EM_OPEN: db "open error: ",0
+	EM_FSTAT: db "fstat error: ",0
+	EM_MMAP: db "mmap error: ",0
+	EM_ELF: db "not an ELF file, invalid 4 header bytes expect 7F E L F",0
+	EM_READ_STDIN: db "stdin read error: ",0
+	EM_CLOSE: db "close error: ",0
+	EM_MSYNC: db "msync error: ",0
+	EM_MUNMAP: db "munmap error: ",0
+	EM_PH_LOAD: db "expected first program header to be LOAD",0
+	EM_ELF_NOT_EXEC: db "not ELF EXEC file, unsupported type",0
 
 ; fd's
 	STDIN: equ 0
@@ -40,7 +73,7 @@ section .data
 	MS_SYNC: equ 4			; msync synchronous because we exit soon after
 
 ; err codes
-	ERR0: db "NOPE",10,0
+	ERR0: db "",0 ; never happens
 	ERR1: db "EPERM Operation not permitted",10,0
 	ERR2: db "ENOENT No such file or directory",10,0
 	ERR3: db "ESRCH No such process",10,0
@@ -75,5 +108,6 @@ section .data
 	ERR32: db "EPIPE Broken pipe",10,0
 	ERR33: db "EDOM	 Math argument out of domain of func",10,0
 	ERR34: db "ERANGE Math result not representable",10,0
-	ERRS: dq ERR0, ERR1, ERR2, ERR3, ERR4, ERR5, ERR6, ERR7, ERR8, ERR9, ERR10, ERR11, ERR12, ERR13, ERR14, ERR15, ERR16, ERR17, ERR18, ERR18, ERR20, ERR21, ERR22, ERR23, ERR24, ERR25, ERR26, ERR27, ERR28, ERR29, ERR30, ERR31, ERR32, ERR33, ERR34
+	ERR35: db "",10,0 ; custom error, no code or name
+	ERRS: dq ERR0, ERR1, ERR2, ERR3, ERR4, ERR5, ERR6, ERR7, ERR8, ERR9, ERR10, ERR11, ERR12, ERR13, ERR14, ERR15, ERR16, ERR17, ERR18, ERR18, ERR20, ERR21, ERR22, ERR23, ERR24, ERR25, ERR26, ERR27, ERR28, ERR29, ERR30, ERR31, ERR32, ERR33, ERR34, ERR35
 	ERRS_BYTE_LEN: equ $-ERRS  ; will need to divide by 8 to get num items

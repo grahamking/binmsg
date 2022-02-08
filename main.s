@@ -8,43 +8,7 @@
 ;; error codes: /usr/include/asm-generic/errno-base.h
 ;;
 
-;; macros
-
-;; handle error and exit
-;;
-;; param1: err message
-%macro err_check 1
-	cmp rax, 0
-	mov rdi, %1 ; should be a conditional move, but no immediate for that
-	jl err
-%endmacro
-
-;; end macros
-
-;;
-;; Static data
-;;
 %include "def.s"
-section .data
-
-	ELF_HEADER: equ 0x464c457f
-
-; messages
-
-	SPACE_START: db "Available space: ",0
-	SPACE_END: db " bytes",10,0
-	WROTE: db "Wrote bytes at offset: ",0
-
-; error messages
-
-	EM_OPEN: db "open error: ",0
-	EM_FSTAT: db "fstat error: ",0
-	EM_MMAP: db "mmap error: ",0
-	EM_ELF: db "not an ELF file, invalid 4 header bytes expect 7F E L F",0
-	EM_READ_STDIN: db "stdin read error: ",0
-	EM_CLOSE: db "close error: ",0
-	EM_MSYNC: db "msync error: ",0
-	EM_MUNMAP: db "munmap error: ",0
 
 ;;
 ;; Global variables
@@ -53,16 +17,17 @@ section .bss
 	fd_ptr: resb 8				; fd of the file we are writing to
 	file_size_ptr: resb 8		; number of bytes in target file
 	mmap_ptr_ptr: resb 8		; address of mmap'ed file
-	write_offset_ptr: resb 8	; how many bytes into the file we'll start writing
+	space_offset_ptr: resb 8	; how many bytes into the file we'll start writing
 	num_space_ptr: resb 8		; number of bytes we can write to in file
 	space_addr_ptr: resb 8		; start of space in memory
-	num_wrote_ptr: resb 8		; how many bytes we wrote to the file
+	;num_wrote_ptr: resb 8		; how many bytes we wrote to the file
+	code_start_ptr: resb 8		; file offset where opcodes start
 
 ;;
 ;; imports
 ;;
 
-extern strlen, exit, print, print_usage, itoa, err, isatty
+extern strlen, exit, print, print_usage, itoa, err, isatty, read_msg, write_msg, show_space
 
 ;;
 ;; .text
@@ -122,10 +87,6 @@ _start:
 	err_check EM_MMAP
 	mov [mmap_ptr_ptr], rax ; save mmap address
 
-	; check it's an ELF file
-	cmp [rax], DWORD ELF_HEADER
-	jne _elf_err
-
 	; ELF format is 64 bytes of header + variable program headers,
 	; then the .text section (the program opcodes).
 	; We need to find the end of program headers
@@ -134,7 +95,16 @@ _start:
 	; that reserved area contains the address of the mmap section
 	mov r12, [mmap_ptr_ptr]		; Get mmap address
 
-	; program headers
+	; check it's an ELF file
+	cmp [r12], DWORD ELF_HEADER
+	jne elf_err
+
+	; check it has type EXEC, that's the only kind we handle so far
+	mov ax, WORD [r12+16]
+	cmp ax, ELF_EXEC
+	jne not_exec_file
+
+	; size of program headers, to find their end
 	xor eax, eax
 	mov ax, WORD [r12+54]		; size of a program header
 	xor ecx, ecx
@@ -142,109 +112,56 @@ _start:
 	mul ecx
 	add rax, QWORD [r12+32]		; offset of start of program headers
 
-	mov [write_offset_ptr], rax
+	mov [space_offset_ptr], rax
 
 	add rax, r12	; rax now has address of end of program headers, start of spare space
 	mov [space_addr_ptr], rax
 
-	; count contiguous 0's (available space)
-	mov rdi, rax		; compare this string
-	mov eax, 0			;  with 0 (null byte)
-	mov ecx, MAX_STORE  ; don't go beyond this many bytes
-	repe scasb			; repeat moving rdi forward until it doesn't match al
+	; find where space stops, which is where program starts
+	; we'll need the first LOAD program header (which comes after the ELF header)
 
-	; space is current rdi pos minus start pos
-	mov rcx, rdi
-	sub rcx, [space_addr_ptr]
-	dec ecx  ; rep leaves rdi on first non-null byte, which we don't count
-	mov [num_space_ptr], rcx
+	mov eax, [r12+64]
+	cmp al, PH_LOAD
+	jne not_load_program_header
 
-	; tell user how much space there is
+	; calculate: (entry point - (p_vaddr - p_offset))
+	mov rbx, [r12+72]   ; 64 + 8, elf64_phdr.p_offset (first program header)
+	mov rax, [r12+80]   ; 64 + 16, elf64_phdr.p_vaddr (first program header)
+	sub rax, rbx
+	mov rbx, [r12+24]   ; entry point as memory address (ELF header)
+	sub rbx, rax
+	mov [code_start_ptr], rbx
 
-	; print message
-	mov rdi, SPACE_START
-	call print
-
-	; convert number to string and print it
-	sub rsp, 8	; we don't expect more than 7 digits (+ null byte) of empty space
-	mov rdi, rcx ; rcx still holds [num_space_ptr]
-	mov rsi, rsp
-	call itoa
-
-	mov rdi, rsi
-	call print
-	add rsp, 8
-
-	mov rdi, SPACE_END
-	call print
-
-	; is there any space?
-	mov eax, DWORD [num_space_ptr]
-	cmp al, 0
-	je _cleanup
+	; we can use the space between end of program headers and start of opcodes
+	mov eax, ebx
+	sub eax, [space_offset_ptr]
+	mov [num_space_ptr], rax
 
 	; is there input on STDIN?
 	mov edi, STDIN
 	call isatty
 	test rax, rax
-	jns exit ; if STDIN is a terminal we're done
+	js _do_write   ; stdin is a pipe, write case
+	; stdin is not a pipe, read case
 
-	; read up to [num_space_ptr] bytes from stdin straight into output
-	mov eax, SYS_READ
-	mov edi, STDIN
-	mov rsi, [space_addr_ptr]		; read straight into the file
-	mov edx, [num_space_ptr]		; how many bytes to read
-	safe_syscall
-	err_check EM_READ_STDIN
-	mov [num_wrote_ptr], rax ; rax tells us how many bytes actually written
+	mov rdi, [space_addr_ptr]
+	mov rsi, [num_space_ptr]
+	call read_msg
 
-	; sync the mmap back to disk
-	mov rcx, [write_offset_ptr]
-	add ecx, [num_wrote_ptr]
-	mov eax, SYS_MSYNC
-	mov rdi, [mmap_ptr_ptr] ; mem to write must be aligned, so use start
-	mov rsi, rcx			; how many bytes to write back
-	mov edx, MS_SYNC
-	safe_syscall
-	err_check EM_MSYNC
+	jmp _cleanup
 
-	; tell user what we did
+_do_write:
 
-	mov rdi, WROTE
-	call print
+	; is there any space?
+	mov eax, DWORD [num_space_ptr]
+	cmp eax, 0
+	je _cleanup
 
-	; convert byte count, print it
-	sub rsp, 8     ; should be plenty of space for string
-	mov edi, [num_wrote_ptr]   ; num bytes written, saved earlier from rax
-	mov rsi, rsp   ; buffer
-	call itoa
-	mov rdi, rsi   ; the buffer we just filled with itoa(num bytes written)
-	call print
-	add rsp, 8
-
-	; print comma and space
-	push 0   ; null byte
-	push ' ' ; space (32)
-	push ',' ; comma (44)
-	mov rdi, rsp
-	call print
-	add rsp, 3
-
-	; convert offset count, print it
-	sub rsp, 8
-	mov rdi, [write_offset_ptr]
-	mov rsi, rsp
-	call itoa
-	mov rdi, rsi
-	call print
-	add rsp, 8
-
-	; print carriage return
-	push 0   ; these two pushes make null-terminated string "\n" on stack
-	push 10
-	mov rdi, rsp
-	call print
-	add rsp, 2
+	mov rdi, [space_addr_ptr]
+	mov rsi, [num_space_ptr]
+	mov rdx, [mmap_ptr_ptr]
+	mov rcx, [space_offset_ptr]
+	call write_msg
 
 _cleanup:
 
@@ -266,7 +183,16 @@ _cleanup:
 ;
 ; misc jumps
 ;
-_elf_err:
+elf_err:
 	; invalid elf header, use our macro by faking rax err code
-	mov rax, -1
+	mov rax, -35
 	err_check EM_ELF
+
+not_load_program_header:
+	mov rax, -35
+	err_check EM_PH_LOAD
+
+not_exec_file:
+	mov rax, -35
+	err_check EM_ELF_NOT_EXEC
+
