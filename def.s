@@ -29,13 +29,15 @@ section .data
 	ELF_EXEC: equ 2				; ELF e_type of ET_EXEC
 	PH_LOAD: equ 1				; program header type LOAD
 	MAX_FNAME_LEN: equ 100
-	USAGE: db `Usage: \n\tWrite: echo -n data | xwrite filename\n\tRead: xwrite filename [> out]\n\0`
+	USAGE: db `Usage: \n\tWrite: echo -n data | binmsg filename\n\tRead: binmsg filename [> out]\n\0`
 
 ; messages
 
-	SPACE_START: db "Available space: ",0
-	SPACE_END: db " bytes",10,0
+	AVAILABLE_SPACE: db "Available space: ",0
+	BYTES: db " bytes",10,0
 	WROTE: db "Wrote bytes at offset: ",0
+	COMMA_SPACE: db ", ",0
+	CR: db "",10,0
 
 ; error messages
 

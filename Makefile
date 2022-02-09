@@ -1,9 +1,12 @@
 main: funcs main.s
 	nasm -g -felf64 main.s
-	# -n -N prevent page alignment, much smaller binary
-	ld -n -N -o xwrite funcs.o main.o
+	ld -n -N -o binmsg funcs.o main.o # -n and -N prevent page alignment, much smaller binary
 
 funcs: funcs.s
 	nasm -g -felf64 funcs.s
 
-.SILENT: main funcs
+clean:
+	rm *.o
+	rm binmsg
+
+.SILENT: main funcs clean

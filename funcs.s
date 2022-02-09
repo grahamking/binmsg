@@ -16,6 +16,9 @@ section .text
 global write_msg
 write_msg:
 	push rax
+	push rbp
+	mov rbp, rsp
+	sub rsp, 8   ; space for 8 character digits
 
 	mov r11, rcx ; [space_offset_ptr]
 	mov r12, rdi ; [space_addr_ptr]
@@ -48,40 +51,29 @@ write_msg:
 	call print
 
 	; convert byte count, print it
-	sub rsp, 8     ; should be plenty of space for string
-	mov rdi, r15   ; num bytes written, saved earlier from rax
-	mov rsi, rsp   ; buffer
+	mov rdi, r15		; num bytes written, saved earlier from rax
+	lea rsi, [rbp-8]	; buffer
 	call itoa
-	mov rdi, rsi   ; the buffer we just filled with itoa(num bytes written)
+	mov rdi, rsi		; the buffer we just filled with itoa(num bytes written)
 	call print
-	add rsp, 8
-
-	; TODO this ain't write can't do this kind of thing to the stack
-	;  move static strings to .data section
 
 	; print comma and space
-	push 0   ; null byte
-	push ' ' ; space (32)
-	push ',' ; comma (44)
-	mov rdi, rsp
+	mov rdi, COMMA_SPACE
 	call print
-	add rsp, 3
 
 	; convert offset count, print it
-	sub rsp, 8
 	mov rdi, r11
-	mov rsi, rsp
+	lea rsi, [rbp-8]
 	call itoa
-	mov rdi, rsi
+	lea rdi, [rbp-8]
 	call print
-	add rsp, 8
 
 	; print carriage return
-	push QWORD 0x000a ; null-terminated string "\n" on stack. push is always 8 bytes
-	mov rdi, rsp
+	mov rdi, CR
 	call print
-	add rsp, 8
 
+	add rsp, 8
+	pop rbp
 	pop rax
 	ret
 
@@ -94,9 +86,11 @@ global read_msg
 read_msg:
 	push rax
 	push rcx
+	push r11
 	push r12
 
-	mov r12, rsi ; save message length
+	mov r11, rdi ; save params
+	mov r12, rsi
 
 	; is there a message? we decide this based on first byte, must not be null
 	mov al, BYTE [rdi]
@@ -110,24 +104,16 @@ read_msg:
 	jmp _read_msg_epilogue
 
 _read_msg_proceed:
-	; yes there's a message, copy it from mmap into stack
-	mov ecx, esi   ; message length param
-	sub rsp, rcx
-	mov rsi, rdi   ; message address param
-	mov rdi, rsp
-	rep movsb
-
-	; write it to stdout
+	; yes there's a message, write it to stdout
 	mov eax, SYS_WRITE
 	mov edi, STDOUT
-	mov rsi, rsp
+	mov rsi, r11
 	mov rdx, r12
 	safe_syscall
 
-	add rsp, r12
-
 _read_msg_epilogue:
 	pop r12
+	pop r11
 	pop rcx
 	pop rax
 
@@ -143,7 +129,7 @@ show_space:
 	push rdi
 
 	; print message
-	mov rdi, SPACE_START
+	mov rdi, AVAILABLE_SPACE
 	call print
 
 	; convert number to string and print it
@@ -157,7 +143,7 @@ show_space:
 	call print
 	add rsp, 8
 
-	mov rdi, SPACE_END
+	mov rdi, BYTES
 	call print
 
 	pop rsi
@@ -276,37 +262,41 @@ itoa:
 	push rdx
 	push rsi
 	push rdi
-	push r14
+	push r8
+	push rbp
+	mov rbp, rsp
+	sub rsp, 8    ; we only handle up to 8 digit numbers
 
-	mov ecx, 0
+	xor ecx, ecx
 	mov rax, rdi  ; rax is numerator
 	mov ebx, 10   ; 10 is denominator
+	mov r8, rbp
 
 _itoa_next_digit:
 	; divide rax by 10 to get split digits into rax:rdx
 	xor edx, edx  ; rdx to 0, it is going to get remainder
 	div rbx
 	add edx, 0x30	; convert to ASCII
-	dec rsp
-	mov [rsp], BYTE dl	; digits are in reverse order. stacks are good for that.
-	                    ; this must be dl, a byte, so that 'movsb' can move bytes later
-					    ; and later when we 'add rsp, r14' that's a number of bytes
 	inc cl
-	cmp eax, 0		    ; do we have more digits?
+	dec r8
+	mov [r8], BYTE dl	; digits are in reverse order, so work down memory
+							; this must be dl, a byte, so that 'movsb' can
+							; move bytes later.
+	cmp eax, 0				; do we have more digits?
 	jg _itoa_next_digit
-	mov r14, rcx    ; save number of converted digits
 
 	; now copy them from stack into memory, they will be in correct order
 	cld					; clear direction flag, so we walk up
 	mov rdi, rsi		; rsi had desination address
-	mov rsi, rsp		; source is stack
+	mov rsi, r8			; source is stack
 						; rcx already has string length
 	rep movsb			; repeat rcx times: copy rsi++ to rdi++
 	mov [rdi], BYTE 0	; null byte to terminate string
-	add rsp, r14		; clear stack
 
 	; epilogue
-	pop r14
+	add rsp, 8
+	pop rbp
+	pop r8
 	pop rdi
 	pop rsi
 	pop rdx
@@ -351,11 +341,8 @@ _err_numeric:
 	add rsp, 8
 
 	; print carriage return
-	push 0   ; these two pushes make null-terminated string "\n" on stack
-	push 10
-	mov rdi, rsp
+	mov rdi, CR
 	call print_err
-	add rsp, 2
 
 	jmp exit
 

@@ -1,5 +1,9 @@
-;; xwrite
+;; binmsg
+;; A tool to write data into spare space in ELF binaries.
+;; Usage: Write: echo -n 'the messages' | binmsg <filename>
+;;        Read: binmsg <filename>
 ;;
+
 ;; syscall (kernel) convention:
 ;;   IN: RDI, RSI, RDX, R10, R8 and R9
 ;;  OUT: RAX

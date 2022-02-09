@@ -7,9 +7,15 @@ Ideas:
 	- Write some notes in there. "Use this one to fix weird customer dat files".
 	- Store binary data. A (small) program within a program? Secret data for basic steganography?
 
+Build:
+
 - Requirements: x86-64 Linux, `nasm` assembler, `make`.
 - Build: `make`
-- Run: `echo -n 'some_data' | xwrite <filename>`
+
+Use:
+
+- Write into file: `echo -n 'some_data' | binmsg <filename>`
+- Read from file: `binmsg <filename>`. If the file doesn't have any data it will tell you how much space it has.
 
 Note the `-n` in echo command above to suppress the new line, which makes little sense embedded in a binary.
 
