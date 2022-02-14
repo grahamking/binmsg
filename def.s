@@ -69,6 +69,7 @@ section .data
 	SYS_MSYNC: equ 26
 	SYS_EXIT: equ 60
 
+; syscall params
 	MAP_SHARED: equ 1
 	TCGETS: equ 0x00005401
 	SIZEOF_TERMIOS: equ 60  ; From: 'struct termios x; print sizeof(x)'

@@ -13,6 +13,7 @@
 ;;
 
 %include "def.s"
+%include "struct.s"
 
 ;;
 ;; Global variables
@@ -100,33 +101,33 @@ _start:
 	mov r12, [mmap_ptr_ptr]		; Get mmap address
 
 	; check it's an ELF file
-	cmp [r12], DWORD ELF_HEADER
+	cmp [r12+elf64.e_ident], DWORD ELF_HEADER
 	jne elf_err
 
 	; check it has type EXEC, that's the only kind we handle so far
-	mov ax, WORD [r12+16]
+	mov ax, WORD [r12+elf64.e_type]
 	cmp ax, ELF_EXEC
 	jne not_exec_file
 
 	; Read program headers to find code start, that will be the end of our space
 
 	xor eax, eax
-	mov ax, WORD [r12+54]		; size of a program header - 56 bytes
+	mov ax, WORD [r12+elf64.e_phentsize]		; size of a program header - 56 bytes
 	mov r10, rax
 	xor ecx, ecx
-	mov cx, WORD [r12+56]		; number of program headers - varies
+	mov cx, WORD [r12+elf64.e_phnum]			; number of program headers - varies
 
 	; interlude - compute end of program headers, that's a candidate for space start
 	mul ecx						; size of a prog header (already in rax) * num prog headers
-	add rax, QWORD [r12+32]     ; add offset of start of program headers
+	add rax, QWORD [r12+elf64.e_phoff]     ; add offset of start of program headers
 	mov [space_offset_ptr], rax ; offset within file
 	add rax, r12				; add mmap address
 	mov [space_addr_ptr], rax   ; memory address (within mmap)
 	; end interlude
 
-	mov rsi, QWORD [r12+32]		; offset of start of program headers, always 64
-	add rsi, r12                ; rsi now points at mmap first program header
-	mov r8, -1					; lowest offset so far. -1 is unsigned max
+	mov rsi, QWORD [r12+elf64.e_phoff]	; offset of start of program headers, always 64
+	add rsi, r12						; rsi now points at mmap first program header
+	mov r8, -1							; lowest offset so far. -1 is unsigned max
 
 _next_ph:
 
@@ -137,18 +138,18 @@ _next_ph:
 	mov r9, rax
 
 	; is it a LOAD header? we only want those
-	mov eax, [rsi+r9]
+	mov eax, [rsi+r9+elf64_phdr.p_type]
 	cmp al, PH_LOAD
 	jne _next_ph_end
 
 	; is it at least read+execute? we only want those
-	mov eax, [rsi+r9+4]
+	mov eax, [rsi+r9+elf64_phdr.p_flags]
 	and eax, 0x5
 	cmp eax, 0x5
 	jne _next_ph_end
 
 	; we found one, only keep if our best so far is bigger
-	mov rax, [rsi+r9+8]
+	mov rax, [rsi+r9+elf64_phdr.p_offset]
 	cmp r8, rax
 	cmova r8, rax	; conditional move; if r8 is above the new value
 
