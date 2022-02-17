@@ -245,6 +245,13 @@ abs_rax:
 	xor eax, edx
 	sub eax, edx
 
+	; use FPU which has an abs instruction - about 3x slower
+	;push rax			; can't copy directly x86 reg -> x87 reg, need to go via memory
+	;fild qword [rsp]   ; copy to x87 register stack
+	;fabs				; abs(top of FPU stack)
+	;fistp qword [rsp]  ; copy from x87 register stack
+	;pop rax			; rax now has abs value
+
 	pop rdx
 	ret
 
