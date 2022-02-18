@@ -129,7 +129,7 @@ _start:
 	add rsi, r12						; rsi now points at mmap first program header
 	mov r8, -1							; lowest offset so far. -1 is unsigned max
 
-_next_ph:
+.next_ph:
 
 	; r9 = size_of_a_program_header (rdx, usually 56) * rcx (loop counter)
 	mov rax, rcx
@@ -140,21 +140,22 @@ _next_ph:
 	; is it a LOAD header? we only want those
 	mov eax, [rsi+r9+elf64_phdr.p_type]
 	cmp al, PH_LOAD
-	jne _next_ph_end
+	jne .next_ph_end
 
 	; is it at least read+execute? we only want those
 	mov eax, [rsi+r9+elf64_phdr.p_flags]
 	and eax, 0x5
 	cmp eax, 0x5
-	jne _next_ph_end
+	jne .next_ph_end
 
 	; we found one, only keep if our best so far is bigger
 	mov rax, [rsi+r9+elf64_phdr.p_offset]
 	cmp r8, rax
 	cmova r8, rax	; conditional move; if r8 is above the new value
 
-_next_ph_end:
-	loop _next_ph
+.next_ph_end:
+	dec ecx
+	jnz .next_ph
 
 	mov [code_start_ptr], r8	; this is where the first opcode appears. our space stops here.
 
@@ -174,21 +175,21 @@ _next_ph_end:
 	mov edi, STDIN
 	call isatty
 	test rax, rax
-	js _do_write   ; stdin is a pipe, write case
+	js .do_write   ; stdin is a pipe, write case
 	; stdin is not a pipe, read case
 
 	mov rdi, [space_addr_ptr]
 	mov rsi, [num_space_ptr]
 	call read_msg
 
-	jmp _cleanup
+	jmp .cleanup
 
-_do_write:
+.do_write:
 
 	; is there any space?
 	mov eax, DWORD [num_space_ptr]
 	cmp eax, 0
-	je _cleanup
+	je .cleanup
 
 	mov rdi, [space_addr_ptr]
 	mov rsi, [num_space_ptr]
@@ -196,7 +197,7 @@ _do_write:
 	mov rcx, [space_offset_ptr]
 	call write_msg
 
-_cleanup:
+.cleanup:
 
 	; munmap. we probably don't need this
 	mov eax, SYS_MUNMAP

@@ -95,15 +95,15 @@ read_msg:
 	; is there a message? we decide this based on first byte, must not be null
 	mov al, BYTE [rdi]
 	cmp al, 0
-	jne _read_msg_proceed
+	jne .read_msg_proceed
 
 	; if there's no msg display space and exit
 	; this is probably more common than display msg, so make it the predicated not-jump
 	mov rdi, r12
 	call show_space
-	jmp _read_msg_epilogue
+	jmp .read_msg_epilogue
 
-_read_msg_proceed:
+.read_msg_proceed:
 	; yes there's a message, write it to stdout
 	mov eax, SYS_WRITE
 	mov edi, STDOUT
@@ -111,7 +111,7 @@ _read_msg_proceed:
 	mov rdx, r12
 	safe_syscall
 
-_read_msg_epilogue:
+.read_msg_epilogue:
 	pop r12
 	pop r11
 	pop rcx
@@ -238,21 +238,26 @@ fprint:
 ;;
 global abs_rax
 abs_rax:
-	push rdx
 
+	mov r11, rdx	; push rdx, faster. r11 is always fair game.
 	; does the actual abs
 	cqo ; fill rdx with sign of rax, so rdx will be 0 or -1 (0xFF..)
 	xor eax, edx
 	sub eax, edx
+	mov rdx, r11	; pop rdx
 
-	; use FPU which has an abs instruction - about 3x slower
+	; MMX - 2x slower
+	;pinsrw xmm0, eax, 0
+	;pabsw xmm1, xmm0
+	;pextrw eax, xmm1, 0
+
+	; FPU - at least 5x slower, most go via memory
 	;push rax			; can't copy directly x86 reg -> x87 reg, need to go via memory
 	;fild qword [rsp]   ; copy to x87 register stack
 	;fabs				; abs(top of FPU stack)
 	;fistp qword [rsp]  ; copy from x87 register stack
 	;pop rax			; rax now has abs value
 
-	pop rdx
 	ret
 
 ;;
@@ -279,7 +284,7 @@ itoa:
 	mov ebx, 10   ; 10 is denominator
 	mov r8, rbp
 
-_itoa_next_digit:
+.itoa_next_digit:
 	; divide rax by 10 to get split digits into rax:rdx
 	xor edx, edx  ; rdx to 0, it is going to get remainder
 	div rbx
@@ -290,7 +295,7 @@ _itoa_next_digit:
 							; this must be dl, a byte, so that 'movsb' can
 							; move bytes later.
 	cmp eax, 0				; do we have more digits?
-	jg _itoa_next_digit
+	jg .itoa_next_digit
 
 	; now copy them from stack into memory, they will be in correct order
 	cld					; clear direction flag, so we walk up
@@ -327,13 +332,13 @@ err:
 	mov ecx, ERRS_BYTE_LEN
 	shr ecx, 3 ; divide by 8
 	cmp eax, ecx
-	jge _err_numeric
+	jge .err_numeric
 
 	mov rdi, QWORD [ERRS+rax*8]
 	call print_err
 	jmp exit
 
-_err_numeric:
+.err_numeric:
 	; err code (rax) isn't in our table, print the code itself
 
 	; convert code to string
