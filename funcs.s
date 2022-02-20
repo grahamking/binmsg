@@ -188,22 +188,28 @@ print_err:
 ;;
 global strlen
 strlen:
-	push rdi
 	push rcx
-	push rsi
+	push rdx
 
-	mov eax, 0
-	mov ecx, MAX_FNAME_LEN
-	mov rsi, rdi	; save string start
-	repne scasb		; search for null byte at end of string, end of filename
-					; leaves rdi pointing at null byte
-	sub rdi, rsi	; subtract start to get length
-	dec edi			; don't count null byte
-	mov eax, edi	; return length in rax
+	xor eax, eax
+	mov edx, 0xFF01		; range(01..FF), i.e. everything except null byte
+	movd xmm0, edx		;  this is the range we are looking for
+	sub eax, 16
+	sub rdi, 16
+.next:
+	add eax, 16
+	add rdi, 16
+	pcmpistri xmm0, [rdi], 0x14	; Packed CMPare Implicit (\0 terminator) STRing
+								;  returning Index.
+								; 0x14 is control byte 1 01 00
+								; 00: src is unsigned bytes
+								; 01: range match
+								; 1: negate the result (so match not in the range, i.e match \0)
+	jnz .next
+	add eax, ecx
 
-	pop rsi
+	pop rdx
 	pop rcx
-	pop rdi
 	ret
 
 ;; Print null terimanted string to file descriptor

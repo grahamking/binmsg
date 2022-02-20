@@ -24,6 +24,7 @@
 ;; end macros
 
 section .data
+	align 16
 
 	ELF_HEADER: equ 0x464c457f  ; ELF magic header
 	ELF_EXEC: equ 2				; ELF e_type of ET_EXEC
