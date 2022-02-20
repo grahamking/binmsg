@@ -32,6 +32,7 @@ section .data
 	PH_LOAD: equ 1				; program header type LOAD
 	MAX_FNAME_LEN: equ 100
 	USAGE: db `Usage: \n\tWrite: echo -n data | binmsg filename\n\tRead: binmsg filename [> out]\n\0`
+	UPX_ID: equ 0x21585055		; "UPX!" to identify files packed with upx
 
 ; messages
 
@@ -53,6 +54,7 @@ section .data
 	EM_MUNMAP: db "munmap error: ",0
 	EM_PH_LOAD: db "expected first program header to be LOAD",0
 	EM_ELF_UNSUPPORTED: db "not ELF EXEC or DYN file, unsupported type",0
+	EM_UPX: db "file is packed with upx, unsupported",0
 
 ; fd's
 	STDIN: equ 0

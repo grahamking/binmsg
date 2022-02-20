@@ -166,10 +166,14 @@ _start:
 
 	; iterate section headers,
 	; find sh_offset closest <= code_start_ptr. add it's sh_size to itself.
-	mov rsi, QWORD [r12+elf64.e_shoff]	; offset of start of section headers
-	add rsi, r12						; rsi now points at mmap first section header
+
 	xor ecx, ecx
 	mov cx, [r12+elf64.e_shnum]			; number of section headers
+	cmp ecx, 0
+	je .use_end_of_program_headers      ; no section headers (UPX files have this)
+
+	mov rsi, QWORD [r12+elf64.e_shoff]	; offset of start of section headers
+	add rsi, r12						; rsi now points at mmap first section header
 	xor ebx, ebx
 	mov bx, [r12+elf64.e_shentsize]		; size of a section header
 	mov r8, 0							; best so far
@@ -212,6 +216,12 @@ _start:
 	mov eax, [code_start_ptr]
 	sub eax, [space_offset_ptr]
 	mov [num_space_ptr], rax
+
+	; sanity check for upx packed files, those are weird
+	mov rsi, [space_addr_ptr]
+	mov eax, DWORD [rsi+4]
+	cmp eax, UPX_ID
+	je upx_file
 
 	; is there input on STDIN?
 	mov edi, STDIN
@@ -271,4 +281,8 @@ not_load_program_header:
 unsupported_elf_type:
 	mov rax, -35
 	err_check EM_ELF_UNSUPPORTED
+
+upx_file:
+	mov rax, -35
+	err_check EM_UPX
 
