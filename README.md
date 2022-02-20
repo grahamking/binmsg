@@ -1,6 +1,8 @@
-Write data into spare space in ELF-64 binary. I'm just practicing assembly.
+**Always backup the target file first**
 
-Many ELF binaries have spare space at the start, often because they page-align sections. This writes data in there. The ELF binary won't know and will still function.
+Writes data into spare space in ELF-64 binary or shared library.
+
+Many ELF files have spare space at the start, often because they page-align sections. This writes data in there. The ELF binary or shared library won't know and will still function.
 
 Ideas:
 
@@ -20,4 +22,4 @@ Use:
 
 Note the `-n` in echo command above to suppress the new line, which makes little sense embedded in a binary.
 
-Only supports EXE ELF files, which is **not many**. Most of your files are probably DYN. Do `readelf -h <file>` and look at "Type" field. `binmsg` will currently only work if that says "EXEC". And even then it doesn't always support those, but am improving it all the time. Assembly is about the journey.
+Mostly this is about me practicing assembly.

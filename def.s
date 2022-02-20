@@ -28,6 +28,7 @@ section .data
 
 	ELF_HEADER: equ 0x464c457f  ; ELF magic header
 	ELF_EXEC: equ 2				; ELF e_type of ET_EXEC
+	ELF_DYN: equ 3				; ELF e_type of ET_DYN
 	PH_LOAD: equ 1				; program header type LOAD
 	MAX_FNAME_LEN: equ 100
 	USAGE: db `Usage: \n\tWrite: echo -n data | binmsg filename\n\tRead: binmsg filename [> out]\n\0`
@@ -51,7 +52,7 @@ section .data
 	EM_MSYNC: db "msync error: ",0
 	EM_MUNMAP: db "munmap error: ",0
 	EM_PH_LOAD: db "expected first program header to be LOAD",0
-	EM_ELF_NOT_EXEC: db "not ELF EXEC file, unsupported type",0
+	EM_ELF_UNSUPPORTED: db "not ELF EXEC or DYN file, unsupported type",0
 
 ; fd's
 	STDIN: equ 0

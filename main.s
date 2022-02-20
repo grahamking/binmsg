@@ -22,10 +22,11 @@ section .bss
 	fd_ptr: resb 8				; fd of the file we are writing to
 	file_size_ptr: resb 8		; number of bytes in target file
 	mmap_ptr_ptr: resb 8		; address of mmap'ed file
+
 	space_offset_ptr: resb 8	; how many bytes into the file we'll start writing
-	num_space_ptr: resb 8		; number of bytes we can write to in file
 	space_addr_ptr: resb 8		; start of space in memory
-	;num_wrote_ptr: resb 8		; how many bytes we wrote to the file
+
+	num_space_ptr: resb 8		; number of bytes we can write to in file
 	code_start_ptr: resb 8		; file offset where opcodes start
 
 ;;
@@ -104,10 +105,14 @@ _start:
 	cmp [r12+elf64.e_ident], DWORD ELF_HEADER
 	jne elf_err
 
-	; check it has type EXEC, that's the only kind we handle so far
+	; check it has type EXEC or DYN, those are the only kinds we handle so far
 	mov ax, WORD [r12+elf64.e_type]
 	cmp ax, ELF_EXEC
-	jne not_exec_file
+	je .ok_file_type
+	cmp ax, ELF_DYN
+	jne unsupported_elf_type
+
+.ok_file_type:  ; we know we handle this type of file
 
 	; Read program headers to find code start, that will be the end of our space
 
@@ -118,9 +123,9 @@ _start:
 	mov cx, WORD [r12+elf64.e_phnum]			; number of program headers - varies
 
 	; interlude - compute end of program headers, that's a candidate for space start
-	mul ecx						; size of a prog header (already in rax) * num prog headers
+	mul ecx					; size of a prog header (already in rax) * num prog headers
 	add rax, QWORD [r12+elf64.e_phoff]     ; add offset of start of program headers
-	mov [space_offset_ptr], rax ; offset within file
+	mov [space_offset_ptr], rax				; offset within file
 	add rax, r12				; add mmap address
 	mov [space_addr_ptr], rax   ; memory address (within mmap)
 	; end interlude
@@ -157,14 +162,51 @@ _start:
 	dec ecx
 	jnz .next_ph
 
-	mov [code_start_ptr], r8	; this is where the first opcode appears. our space stops here.
+	mov [code_start_ptr], r8 ; this is where first opcode appears. space stops here.
 
-	; TODO: compute start of space.
-	; It's the number closest to, and less than, end of space (above), from:
-	; - end of program headers (computed earlier)
-	; - iterate section headers, find closest lower sh_offset. add it's sh_size to itself.
-	;   ignore values with sh_offset of 0, and values not strictly less that 'end of space' above
-	; That's start of our space
+	; iterate section headers,
+	; find sh_offset closest <= code_start_ptr. add it's sh_size to itself.
+	mov rsi, QWORD [r12+elf64.e_shoff]	; offset of start of section headers
+	add rsi, r12						; rsi now points at mmap first section header
+	xor ecx, ecx
+	mov cx, [r12+elf64.e_shnum]			; number of section headers
+	xor ebx, ebx
+	mov bx, [r12+elf64.e_shentsize]		; size of a section header
+	mov r8, 0							; best so far
+	sub rsi, rbx
+
+.next_sh:
+	add rsi, rbx ; next section header
+	mov rax, QWORD [rsi+elf64_shdr.sh_offset]
+	add rax, QWORD [rsi+elf64_shdr.sh_size]
+
+	; is it past code start? then we're not interested
+	cmp rax, [code_start_ptr]
+	jge .next_sh_end
+
+	; is it bigger than our best so far?
+	cmp rax, r8
+	jle .next_sh_end
+	mov r8, rax
+
+.next_sh_end:
+	dec ecx
+	jnz .next_sh
+	; r8 now has the end of the closest section header
+
+	; compute start of space
+	; It's the number closest to, and less than, start of opcodes, from:
+	; - end of program headers (already in space_offset_ptr)
+	; - end of closest section header
+	cmp r8, [space_offset_ptr]
+	jle .use_end_of_program_headers
+
+	; use end of closest section header
+	mov [space_offset_ptr], r8
+	add r8, r12
+	mov [space_addr_ptr], r8
+
+.use_end_of_program_headers:
 
 	; we can use the space between end of program headers and start of opcodes
 	mov eax, [code_start_ptr]
@@ -226,7 +268,7 @@ not_load_program_header:
 	mov rax, -35
 	err_check EM_PH_LOAD
 
-not_exec_file:
+unsupported_elf_type:
 	mov rax, -35
-	err_check EM_ELF_NOT_EXEC
+	err_check EM_ELF_UNSUPPORTED
 
