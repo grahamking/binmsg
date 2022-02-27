@@ -93,8 +93,9 @@ read_msg:
 	mov r12, rsi
 
 	; is there a message? we decide this based on first byte, must not be null
+	xor eax, eax
 	mov al, BYTE [rdi]
-	cmp al, 0
+	test eax, eax
 	jne .read_msg_proceed
 
 	; if there's no msg display space and exit
@@ -300,7 +301,7 @@ itoa:
 	mov [r8], BYTE dl	; digits are in reverse order, so work down memory
 							; this must be dl, a byte, so that 'movsb' can
 							; move bytes later.
-	cmp eax, 0				; do we have more digits?
+	test eax, eax			; do we have more digits?
 	jg .itoa_next_digit
 
 	; now copy them from stack into memory, they will be in correct order

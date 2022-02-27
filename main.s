@@ -169,7 +169,7 @@ _start:
 
 	xor ecx, ecx
 	mov cx, [r12+elf64.e_shnum]			; number of section headers
-	cmp ecx, 0
+	test ecx, ecx
 	je .use_end_of_program_headers      ; no section headers (UPX files have this)
 
 	mov rsi, QWORD [r12+elf64.e_shoff]	; offset of start of section headers
@@ -240,7 +240,7 @@ _start:
 
 	; is there any space?
 	mov eax, DWORD [num_space_ptr]
-	cmp eax, 0
+	test eax, eax
 	je .cleanup
 
 	mov rdi, [space_addr_ptr]
