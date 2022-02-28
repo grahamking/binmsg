@@ -136,7 +136,6 @@ show_space:
 	; convert number to string and print it
 	pop rdi  ; param we were given space as number
 	sub rsp, 8	; we don't expect more than 7 digits (+ null byte) of empty space
-	;mov rdi, [num_space_ptr]
 	mov rsi, rsp
 	call itoa
 
@@ -258,7 +257,7 @@ abs_rax:
 	;pabsw xmm1, xmm0
 	;pextrw eax, xmm1, 0
 
-	; FPU - at least 5x slower, most go via memory
+	; FPU - at least 5x slower, must go via memory
 	;push rax			; can't copy directly x86 reg -> x87 reg, need to go via memory
 	;fild qword [rsp]   ; copy to x87 register stack
 	;fabs				; abs(top of FPU stack)

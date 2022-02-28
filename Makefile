@@ -5,6 +5,10 @@ main: funcs main.s
 funcs: funcs.s
 	nasm -g -felf64 funcs.s
 
+perf: perf.s
+	nasm -f elf64 perf.s
+	ld -n -N -o perf perf.o
+
 clean:
 	rm *.o
 	rm binmsg
